@@ -19,7 +19,7 @@ if not Kairo then warn("Kairo failed!") return end
 local Window = Kairo:CreateWindow({
     Title = "Greedy Growers AutoFarm",
     Theme = "Ocean",
-    Size = UDim2.fromOffset(480, 480),
+    Size = UDim2.fromOffset(480, 520),
     Center = true,
     Draggable = true,
     Badges = {"v5.0"},
@@ -160,19 +160,15 @@ end
 
 local function doHarvest()
     if not Toggles.AutoHarvest then return end
-    if HarvestDone then return end -- cegah double
+    if HarvestDone then return end
     HarvestDone = true
     if Settings.HarvestMode == "DeadTree" then
-        -- CollectDeadTree saja
         if Remote.CollectDeadTree then
             pcall(function() Remote.CollectDeadTree:InvokeServer() end)
-            task.wait(0.3)
         end
     elseif Settings.HarvestMode == "Grown" then
-        -- StopPlant = harvest sebelum mati
         if Remote.StopPlant then
             pcall(function() Remote.StopPlant:InvokeServer() end)
-            task.wait(0.3)
         end
     end
 end
