@@ -191,11 +191,20 @@ end
 -- ============================================================
 --  KAIRO UI
 -- ============================================================
-local Kairo = loadstring(game:HttpGet("https://raw.githubusercontent.com/Itzzavi335/Kairo-Ui-Library/refs/heads/main/source.luau"))()
-if not Kairo then
-    warn("Kairo failed to load!")
+local kairoUrl = "https://raw.githubusercontent.com/Itzzavi335/Kairo-Ui-Library/refs/heads/main/source.luau"
+local kairoSrc
+local fetchOk = pcall(function() kairoSrc = game:HttpGet(kairoUrl) end)
+if not fetchOk or not kairoSrc or kairoSrc == "" then
+    warn("Kairo fetch failed!")
     return
 end
+local kairoFn, kairoErr = loadstring(kairoSrc)
+if not kairoFn then
+    warn("Kairo loadstring failed: "..tostring(kairoErr))
+    return
+end
+local Kairo = kairoFn()
+if not Kairo then warn("Kairo failed to load!") return end
 
 Window = Kairo:CreateWindow({
     Title = "Greedy Growers AutoFarm",
