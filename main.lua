@@ -1,4 +1,4 @@
--- ============================================================
+	-- ============================================================
 --  GREEDY GROWERS AUTO FARM v5.0
 -- ============================================================
 print("=== LOADING GREEDY GROWERS AUTO FARM v5.0 ===")
@@ -30,6 +30,7 @@ local Window = Kairo:CreateWindow({
 if not Window then warn("Window failed!") return end
 
 local TabFarm = Window:CreateTab("Farm")
+local TabShop = Window:CreateTab("Shop")
 local TabMisc = Window:CreateTab("Misc")
 
 -- ============================================================
@@ -61,6 +62,12 @@ if KnitServices then
     Remote.RequestPurchase = sg(function() return KnitServices.SeedConveyorService.RF.RequestPurchase end)
     Remote.SeedSpawned     = sg(function() return KnitServices.SeedConveyorService.RE.SeedSpawned end)
     Remote.ToggleEquip     = sg(function() return KnitServices.ToolService.RE.ToggleEquip end)
+    Remote.PlantTree       = sg(function() return KnitServices.PlayerPlotService.RF.PlantTree end)
+    Remote.FruitCollected  = sg(function() return KnitServices.PlayerPlotService.RE.FruitCollected end)
+    Remote.CollectFruit    = sg(function() return KnitServices.PlayerPlotService.RF.CollectFruit end)
+    Remote.FruitReady      = sg(function() return KnitServices.PlayerPlotService.RE.FruitReady end)
+    Remote.TreeRemoved     = sg(function() return KnitServices.PlayerPlotService.RE.TreeRemoved end)
+    Remote.GetMyPlot       = sg(function() return KnitServices.PlayerPlotService.RF.GetMyPlot end)
 end
 
 -- ============================================================
@@ -81,7 +88,7 @@ local SEED_GENERATION_TIME = {
 -- ============================================================
 --  STATE
 -- ============================================================
-local Toggles   = { AutoFarm=false, AutoSell=false, AutoBuy=false, AutoHarvest=false }
+local Toggles   = { AutoFarm=false, AutoSell=false, AutoBuy=false, AutoHarvest=false, AutoHarvestFruit=false }
 local Settings  = {
     SelectedSeed="Oak", BuySeed={"Oak"}, BuyMode="Direct",
     BuyAmount=100, SellTargets={"All"}, HarvestMode="DeadTree",
@@ -128,19 +135,21 @@ local function doEquipSeed()
     if not Remote.ToggleEquip then return end
     local seedLower = Settings.SelectedSeed:lower()
 
-    -- Scan Inventory (6 slot), cari seed yang cocok by nama
+    -- Scan Inventory, cari seed by nama, equip by slot index
     local inv = LocalPlayer:FindFirstChild("Inventory")
     if inv then
         local items = inv:GetChildren()
         for i, item in ipairs(items) do
-            if item.Name:lower():find(seedLower) then
+            local nameLow = item.Name:lower()
+            -- "oak seed", "pine seed", "oak", "oak_seed" dll
+            if nameLow:find(seedLower) or (seedLower:find(nameLow) and #nameLow > 2) then
                 pcall(function() Remote.ToggleEquip:FireServer(true, i) end)
                 return
             end
         end
     end
 
-    -- Fallback: scan Backpack by index
+    -- Fallback: scan Backpack
     local bp = LocalPlayer:FindFirstChildOfClass("Backpack")
     if bp then
         local items = bp:GetChildren()
@@ -152,24 +161,41 @@ local function doEquipSeed()
         end
     end
 
-    -- Last fallback: pakai slot manual dari Settings.SeedSlot
+    -- Last fallback: slot manual
     if Settings.SeedSlot >= 1 then
         pcall(function() Remote.ToggleEquip:FireServer(true, Settings.SeedSlot) end)
     end
+end
+
+-- Cari UUID seed di inventory untuk PlantTree
+local function getSeedUUID()
+    local seedLower = Settings.SelectedSeed:lower()
+    local inv = LocalPlayer:FindFirstChild("Inventory")
+    if inv then
+        for _, item in ipairs(inv:GetChildren()) do
+            if item.Name:lower():find(seedLower) then
+                -- UUID bisa dari attribute atau Name item itu sendiri
+                local uuid = item:GetAttribute("UUID") or item:GetAttribute("Id") or item:GetAttribute("ItemId")
+                if uuid then return uuid end
+                -- Kalau tidak ada attribute, coba nama item sebagai UUID
+                if #item.Name > 10 then return item.Name end
+            end
+        end
+    end
+    return nil
 end
 
 local function doHarvest()
     if not Toggles.AutoHarvest then return end
     if HarvestDone then return end
     HarvestDone = true
-    if Settings.HarvestMode == "DeadTree" then
-        if Remote.CollectDeadTree then
-            pcall(function() Remote.CollectDeadTree:InvokeServer() end)
-        end
-    elseif Settings.HarvestMode == "Grown" then
-        if Remote.StopPlant then
-            pcall(function() Remote.StopPlant:InvokeServer() end)
-        end
+    -- Selalu collect dead tree dulu (paling reliable)
+    if Remote.CollectDeadTree then
+        pcall(function() Remote.CollectDeadTree:InvokeServer() end)
+    end
+    -- Grown mode: juga stop plant untuk collect buah
+    if Settings.HarvestMode == "Grown" and Remote.StopPlant then
+        pcall(function() Remote.StopPlant:InvokeServer() end)
     end
 end
 
@@ -231,8 +257,43 @@ end
 if Remote.PlantStoppedAll then
     Remote.PlantStoppedAll.OnClientEvent:Connect(function()
         PlantDied = true
-        if Toggles.AutoHarvest or Toggles.AutoSell then
-            task.spawn(onRoundStopped)
+        if Toggles.AutoHarvest and not HarvestDone then
+            task.spawn(function()
+                doHarvest()
+                doSell()
+            end)
+        end
+    end)
+end
+
+-- TreeRemoved = pohon mati/dihapus → harvest INSTANT
+if Remote.TreeRemoved then
+    Remote.TreeRemoved.OnClientEvent:Connect(function()
+        PlantDied = true
+        if Toggles.AutoHarvest and not HarvestDone then
+            task.spawn(doHarvest)
+        end
+    end)
+end
+
+-- FruitReady = buah siap dipetik → auto collect
+if Remote.FruitReady then
+    Remote.FruitReady.OnClientEvent:Connect(function(plotIndex, fruitUUID, count, stage, mutations)
+        if not Toggles.AutoHarvestFruit then return end
+        if Remote.CollectFruit and fruitUUID then
+            pcall(function() Remote.CollectFruit:InvokeServer(fruitUUID) end)
+        elseif Remote.CollectDeadTree then
+            pcall(function() Remote.CollectDeadTree:InvokeServer() end)
+        end
+    end)
+end
+
+-- FruitCollected fallback
+if Remote.FruitCollected then
+    Remote.FruitCollected.OnClientEvent:Connect(function(plotIndex, fruitUUID, count)
+        if not Toggles.AutoHarvestFruit then return end
+        if Remote.CollectFruit and fruitUUID then
+            pcall(function() Remote.CollectFruit:InvokeServer(fruitUUID) end)
         end
     end)
 end
@@ -254,24 +315,24 @@ local function addSection(title, tab)
     Window:AddDivider(_curTab, title)
 end
 
-local function addToggle(title, default, callback)
-    Window:AddToggle(_curTab, title, "", default, callback)
+local function addToggle(title, default, callback, tab)
+    Window:AddToggle(tab or _curTab, title, "", default, callback)
 end
 
-local function addButton(title, callback)
-    Window:AddButton(_curTab, title, "", nil, callback)
+local function addButton(title, callback, tab)
+    Window:AddButton(tab or _curTab, title, "", nil, callback)
 end
 
-local function addDropdown(title, options, default, callback)
-    Window:AddDropdown(_curTab, title, "", options, false, default, callback)
+local function addDropdown(title, options, default, callback, tab)
+    Window:AddDropdown(tab or _curTab, title, "", options, false, default, callback)
 end
 
-local function addMultiDropdown(title, options, default, callback)
-    Window:AddDropdown(_curTab, title, "", options, true, default, callback)
+local function addMultiDropdown(title, options, default, callback, tab)
+    Window:AddDropdown(tab or _curTab, title, "", options, true, default, callback)
 end
 
-local function addSlider(title, min, max, default, callback)
-    Window:AddSlider(_curTab, title, "", min, max, default, callback)
+local function addSlider(title, min, max, default, callback, tab)
+    Window:AddSlider(tab or _curTab, title, "", min, max, default, callback)
 end
 
 -- ============================================================
@@ -296,6 +357,10 @@ addSection("HARVEST")
 addToggle("Auto Harvest", false, function(v)
     Toggles.AutoHarvest = v
     notify("Auto Harvest: "..(v and "ON" or "OFF"), v and C_ON or C_OFF)
+end)
+addToggle("Auto Harvest Fruit", false, function(v)
+    Toggles.AutoHarvestFruit = v
+    notify("Auto Harvest Fruit: "..(v and "ON" or "OFF"), v and C_ON or C_OFF)
 end)
 addDropdown("Harvest Mode", {"DeadTree","Grown"}, "DeadTree", function(v) Settings.HarvestMode = v end)
 addSlider("Grown Wait (sec)", 1, 30, 8, function(v) Settings.GrownWaitTime = v end)
@@ -355,6 +420,57 @@ addButton("Stop Plant", function()
     end
 end)
 addButton("Buy Seed Now", function() doBuy() end)
+
+-- SHOP TAB
+addSection("BUY", TabShop)
+addToggle("Auto Buy", false, function(v)
+    Toggles.AutoBuy = v
+    if not v then ConveyorEnabled = false end
+    notify("Auto Buy: "..(v and "ON" or "OFF"), v and C_ON or C_OFF)
+end)
+addMultiDropdown("Buy Seeds", SEEDS, {"Oak"}, function(v) Settings.BuySeed = v end, TabShop)
+addDropdown("Buy Mode", {"Direct","Conveyor"}, "Direct", function(v)
+    Settings.BuyMode = v
+    if v == "Direct" then ConveyorEnabled = false end
+end, TabShop)
+addSlider("Buy Amount", 10, 500, 100, function(v) Settings.BuyAmount = v end, TabShop)
+addButton("Buy Now", function() doBuy() end, TabShop)
+
+addSection("SELL", TabShop)
+addToggle("Auto Sell", false, function(v)
+    Toggles.AutoSell = v
+    notify("Auto Sell: "..(v and "ON" or "OFF"), v and C_ON or C_OFF)
+end, TabShop)
+local sellOpts2 = {"All"}
+for _, s in ipairs(SEEDS) do table.insert(sellOpts2, s) end
+addMultiDropdown("Sell Targets", sellOpts2, {"All"}, function(v) Settings.SellTargets = v end, TabShop)
+addDropdown("Sell Mode", {"Instant","Count&Delay"}, "Instant", function(v) Settings.SellMode = v end, TabShop)
+addSlider("Sell Count", 1, 100, 10, function(v) Settings.SellCount = v end, TabShop)
+addSlider("Sell Delay (sec)", 5, 180, 60, function(v) Settings.SellDelay = v end, TabShop)
+addButton("Sell All Now", function()
+    if Remote.SellAll then
+        pcall(function() Remote.SellAll:InvokeServer() end)
+        notify("Sold All!", C_ON)
+    end
+end, TabShop)
+
+addSection("STANDS", TabShop)
+addButton("TP to Sell Stand", function()
+    local stand = workspace:FindFirstChild("BigField") and workspace.BigField:FindFirstChild("SellStand")
+    if stand then
+        local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if hrp then pcall(function() hrp.CFrame = CFrame.new(stand:GetPivot().Position + Vector3.new(0,3,0)) end) end
+        notify("TP to Sell Stand!", C_ACCENT)
+    else notify("Stand not found!", C_OFF) end
+end, TabShop)
+addButton("TP to Seed Stand", function()
+    local stand = workspace:FindFirstChild("BigField") and workspace.BigField:FindFirstChild("SeedStand")
+    if stand then
+        local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if hrp then pcall(function() hrp.CFrame = CFrame.new(stand:GetPivot().Position + Vector3.new(0,3,0)) end) end
+        notify("TP to Seed Stand!", C_ACCENT)
+    else notify("Stand not found!", C_OFF) end
+end, TabShop)
 
 -- MISC
 addSection("MISC", TabMisc)
