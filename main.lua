@@ -123,11 +123,19 @@ end
 -- ============================================================
 local function doBuy()
     if not Toggles.AutoBuy then return end
-    if Settings.BuyMode == "Conveyor" then ConveyorEnabled = true return end
-    if not Remote.BuySeed then return end
+    if Settings.BuyMode == "Conveyor" then
+        ConveyorEnabled = true
+        return
+    end
+    -- Direct mode
+    if not Remote.BuySeed then warn("doBuy: Remote.BuySeed nil") return end
+    if not Settings.BuySeed or #Settings.BuySeed == 0 then return end
     for _, seed in ipairs(Settings.BuySeed) do
-        pcall(function() Remote.BuySeed:InvokeServer(seed, Settings.BuyAmount) end)
-        task.wait(0.1)
+        local ok, err = pcall(function()
+            Remote.BuySeed:InvokeServer(seed, Settings.BuyAmount)
+        end)
+        if not ok then warn("doBuy "..seed..": "..tostring(err)) end
+        task.wait(0.05)
     end
 end
 
@@ -365,33 +373,6 @@ end)
 addDropdown("Harvest Mode", {"DeadTree","Grown"}, "DeadTree", function(v) Settings.HarvestMode = v end)
 addSlider("Grown Wait (sec)", 1, 30, 8, function(v) Settings.GrownWaitTime = v end)
 
--- BUY
-addSection("BUY")
-addToggle("Auto Buy", false, function(v)
-    Toggles.AutoBuy = v
-    if not v then ConveyorEnabled = false end
-    notify("Auto Buy: "..(v and "ON" or "OFF"), v and C_ON or C_OFF)
-end)
-addMultiDropdown("Buy Seeds", SEEDS, {"Oak"}, function(v) Settings.BuySeed = v end)
-addDropdown("Buy Mode", {"Direct", "Conveyor"}, "Direct", function(v)
-    Settings.BuyMode = v
-    if v == "Direct" then ConveyorEnabled = false end
-end)
-addSlider("Buy Amount", 10, 500, 100, function(v) Settings.BuyAmount = v end)
-
--- SELL
-addSection("SELL")
-addToggle("Auto Sell", false, function(v)
-    Toggles.AutoSell = v
-    notify("Auto Sell: "..(v and "ON" or "OFF"), v and C_ON or C_OFF)
-end)
-local sellOpts = {"All"}
-for _, s in ipairs(SEEDS) do table.insert(sellOpts, s) end
-addMultiDropdown("Sell Targets", sellOpts, {"All"}, function(v) Settings.SellTargets = v end)
-addDropdown("Sell Mode", {"Instant","Count&Delay"}, "Instant", function(v) Settings.SellMode = v end)
-addSlider("Sell Count (items)", 1, 100, 10, function(v) Settings.SellCount = v end)
-addSlider("Sell Delay (sec)", 5, 180, 60, function(v) Settings.SellDelay = v end)
-
 -- MANUAL
 addSection("MANUAL")
 addButton("Plant Now", function()
@@ -419,7 +400,6 @@ addButton("Stop Plant", function()
         notify("Stopped!", C_OFF)
     end
 end)
-addButton("Buy Seed Now", function() doBuy() end)
 
 -- SHOP TAB
 addSection("BUY", TabShop)
@@ -479,6 +459,32 @@ addToggle("Anti AFK", false, function(v)
     antiAfkEnabled = v
     notify("Anti AFK: "..(v and "ON" or "OFF"), v and C_ON or C_OFF)
 end)
+
+-- WalkSpeed
+addSlider("WalkSpeed", 8, 100, 16, function(v)
+    local char = LocalPlayer.Character
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    if hum then pcall(function() hum.WalkSpeed = v end) end
+end, TabMisc)
+
+-- Reduce Map (Potato Mode)
+addButton("Reduce Map (Potato)", function()
+    pcall(function()
+        for _, obj in ipairs(workspace:GetDescendants()) do
+            if obj:IsA("BasePart") then
+                obj.Material = Enum.Material.SmoothPlastic
+                obj.Reflectance = 0
+            elseif obj:IsA("Texture") or obj:IsA("Decal") then
+                obj:Destroy()
+            elseif obj:IsA("ParticleEmitter") or obj:IsA("Fire") or obj:IsA("Smoke") or obj:IsA("Sparkles") then
+                obj.Enabled = false
+            elseif obj:IsA("PostEffect") then
+                obj.Enabled = false
+            end
+        end
+        notify("Potato Mode ON!", C_ON)
+    end)
+end, TabMisc)
 
 
 local statsRef = Window:AddParagraph(TabMisc, "Stats", "FPS: -- | Ping: --")
@@ -591,5 +597,3 @@ task.spawn(function()
         end
     end
 end)
-
-print("OK Greedy Growers AutoFarm v5.0 loaded!")
