@@ -597,3 +597,5 @@ task.spawn(function()
         end
     end
 end)
+
+print("OK Greedy Growers AutoFarm v5.0 loaded!")
