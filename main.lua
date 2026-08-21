@@ -4,14 +4,14 @@
 print("=== LOADING W424HUB - GREEDY GROWERS v5.1 ===")
 
 -- ============================================================
---  LOAD UI LIBRARY (Oxidelib) + GAYA GROWAGARDEN2
+--  YAHAHAHA HAYYUK 
 -- ============================================================
 local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/Naellx/Oxidelib/main/Oxidelib.lua"))()
 if not Library then return warn("Oxidelib gagal dimuat") end
 
-Library:SetTheme("OLED")
+Library:SetTheme("Ocean")  -- <-- DIGANTI JADI OCEAN
 
-local MY_LOGO = "rbxassetid://91006203868530"  -- Logo baru W424HUB
+local MY_LOGO = "rbxassetid://70773874533764"  -- <-- LOGO BARU
 
 local Window = Library:CreateWindow({
     Name = "W424HUB",
@@ -33,12 +33,19 @@ task.spawn(function()
     end
 end)
 
--- Mobile Bubble (gaya GrowAGarden2)
+-- ============================================================
+--  MOBILE BUBBLE (FIX DUPLIKAT)
+-- ============================================================
 task.spawn(function()
     pcall(function()
         local sg = Window.ScreenGui
         if not sg then return end
-        
+
+        -- Hapus bubble lama jika ada (cegah duplikat)
+        local oldBubble = sg:FindFirstChild("W424MobileBubble")
+        if oldBubble then oldBubble:Destroy() end
+
+        -- Buat bubble baru
         local btn = Instance.new("TextButton")
         btn.Name = "W424MobileBubble"
         btn.Size = UDim2.new(0, 56, 0, 56)
@@ -48,14 +55,14 @@ task.spawn(function()
         btn.Text = ""
         btn.ZIndex = 999
         btn.Parent = sg
-        
+
         local corner = Instance.new("UICorner", btn)
         corner.CornerRadius = UDim.new(0, 16)
-        
+
         local stroke = Instance.new("UIStroke", btn)
         stroke.Color = Color3.fromRGB(167, 200, 244)
         stroke.Thickness = 1.5
-        
+
         local icon = Instance.new("ImageLabel", btn)
         icon.Size = UDim2.new(0.8, 0, 0.8, 0)
         icon.Position = UDim2.new(0.1, 0, 0.1, 0)
@@ -63,25 +70,25 @@ task.spawn(function()
         icon.Image = MY_LOGO
         icon.ScaleType = Enum.ScaleType.Fit
         icon.ZIndex = 1000
-        
+
         btn.MouseButton1Click:Connect(function() Window:ToggleUI() end)
-        
+
         local UserInputService = game:GetService("UserInputService")
         local dragging, dragStart, startPos = false, nil, nil
-        
+
         btn.InputBegan:Connect(function(input)
             if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
                 dragging, dragStart, startPos = true, input.Position, btn.Position
             end
         end)
-        
+
         UserInputService.InputChanged:Connect(function(input)
             if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
                 local delta = input.Position - dragStart
                 btn.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
             end
         end)
-        
+
         UserInputService.InputEnded:Connect(function(input)
             if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
                 dragging = false
@@ -661,6 +668,7 @@ SubStands:AddButton({
 -- ===== MISC TAB =====
 local SubMisc = TabMisc:AddSubTab("Settings")
 SubMisc:AddSection("MISC")
+local antiAfkEnabled = false
 SubMisc:AddToggle({
     Name = "Anti AFK",
     Default = false,
