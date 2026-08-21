@@ -41,7 +41,6 @@ task.spawn(function()
         local sg = Window.ScreenGui
         if not sg then return end
 
-        -- Hapus bubble lama jika ada (cegah duplikat)
         local oldBubble = sg:FindFirstChild("W424MobileBubble")
         if oldBubble then oldBubble:Destroy() end
 
@@ -280,12 +279,10 @@ local function doHarvest()
     if HarvestDone then return end
     HarvestDone = true
 
-    -- Selalu collect dead tree terlebih dahulu (paling aman)
     if Remote.CollectDeadTree then
         pcall(function() Remote.CollectDeadTree:InvokeServer() end)
     end
 
-    -- Jika mode Grown, hentikan plant agar buah turun / collect semua
     if Settings.HarvestMode == "Grown" and Remote.StopPlant then
         pcall(function() Remote.StopPlant:InvokeServer() end)
     end
@@ -448,7 +445,7 @@ SubFarm:AddToggle({
     end
 })
 
--- SubHarvest (berisi semua fitur harvest)
+-- SubHarvest (berisi semua fitur harvest + stop plant)
 SubHarvest:AddSection("HARVEST SETTINGS")
 SubHarvest:AddToggle({
     Name = "Auto Harvest",
@@ -487,8 +484,29 @@ SubHarvest:AddSlider({
     Default = 8,
     Callback = function(v) Settings.GrownWaitTime = v end
 })
+SubHarvest:AddDivider()
+SubHarvest:AddSection("QUICK ACTIONS")
+SubHarvest:AddButton({
+    Name = "Stop Plant (Now)",
+    Callback = function()
+        if Remote.StopPlant then
+            pcall(function() Remote.StopPlant:InvokeServer() end)
+            FarmRunning = false
+            Window:Notify({ Title = "Stopped!", Type = "warning", Duration = 2 })
+        end
+    end
+})
+SubHarvest:AddButton({
+    Name = "Harvest Now",
+    Callback = function()
+        if Remote.CollectDeadTree then
+            pcall(function() Remote.CollectDeadTree:InvokeServer() end)
+            Window:Notify({ Title = "Harvested!", Type = "success", Duration = 2 })
+        end
+    end
+})
 
--- SubManual (berisi tombol manual)
+-- SubManual (tetap ada untuk kontrol lengkap)
 SubManual:AddSection("MANUAL CONTROLS")
 SubManual:AddButton({
     Name = "Plant Now",
@@ -724,10 +742,19 @@ local function updatePlotInfo()
     if plotRemote then
         local ok, plotData = pcall(function() return plotRemote:InvokeServer() end)
         if ok and plotData then
-            local treeCount = 0
-            if plotData and plotData.Trees then treeCount = #plotData.Trees end
-            plotInfoLabel.Text = "Plot: "..tostring(plotData.Name or "N/A").." | Trees: "..treeCount
-            return
+            -- Cek apakah plotData adalah tabel, bukan number
+            if type(plotData) == "table" then
+                local treeCount = 0
+                if plotData.Trees and type(plotData.Trees) == "table" then
+                    treeCount = #plotData.Trees
+                end
+                plotInfoLabel.Text = "Plot: "..tostring(plotData.Name or "N/A").." | Trees: "..treeCount
+                return
+            else
+                -- Jika plotData adalah number (misal ID), kita tampilkan saja ID-nya
+                plotInfoLabel.Text = "Plot ID: "..tostring(plotData).." (tidak ada detail tambahan)"
+                return
+            end
         end
     end
     plotInfoLabel.Text = "Plot info: not available"
