@@ -4,14 +4,14 @@
 print("=== LOADING W424HUB - GREEDY GROWERS v5.1 ===")
 
 -- ============================================================
---  YAHAHAHA HAYYUK 
+--  LOAD UI LIBRARY (Oxidelib) + GAYA GROWAGARDEN2
 -- ============================================================
 local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/Naellx/Oxidelib/main/Oxidelib.lua"))()
 if not Library then return warn("Oxidelib gagal dimuat") end
 
-Library:SetTheme("Ocean")  -- <-- DIGANTI JADI OCEAN
+Library:SetTheme("Ocean")
 
-local MY_LOGO = "rbxassetid://70773874533764"  -- <-- LOGO BARU
+local MY_LOGO = "rbxassetid://70773874533764"
 
 local Window = Library:CreateWindow({
     Name = "W424HUB",
@@ -45,7 +45,6 @@ task.spawn(function()
         local oldBubble = sg:FindFirstChild("W424MobileBubble")
         if oldBubble then oldBubble:Destroy() end
 
-        -- Buat bubble baru
         local btn = Instance.new("TextButton")
         btn.Name = "W424MobileBubble"
         btn.Size = UDim2.new(0, 56, 0, 56)
@@ -98,7 +97,7 @@ task.spawn(function()
 end)
 
 -- ============================================================
---  REMOTE LOADING (SAMA PERSIS)
+--  REMOTE LOADING
 -- ============================================================
 task.wait(1)
 
@@ -169,9 +168,9 @@ local Settings  = {
     SelectedSeed="Oak", BuySeed={"Oak"}, BuyMode="Direct",
     BuyAmount=100, SellTargets={"All"}, HarvestMode="DeadTree",
     GrownWaitTime=8, SeedSlot=1,
-    SellMode="Instant",   -- "Instant" atau "Count&Delay"
-    SellCount=10,         -- jual setiap N item di inventory
-    SellDelay=60,         -- jual setiap N detik (max 180)
+    SellMode="Instant",
+    SellCount=10,
+    SellDelay=60,
     AutoCollectAll=false,
 }
 local FarmRunning     = false
@@ -196,7 +195,7 @@ if Remote.SeedSpawned and Remote.RequestPurchase then
 end
 
 -- ============================================================
---  HELPERS (DIPERBAIKI)
+--  HELPERS
 -- ============================================================
 local function doBuy()
     if not Toggles.AutoBuy then return end
@@ -204,7 +203,6 @@ local function doBuy()
         ConveyorEnabled = true
         return
     end
-    -- Direct mode
     if not Settings.BuySeed or #Settings.BuySeed == 0 then return end
 
     local buyRemote = Remote.BuySeed
@@ -281,9 +279,13 @@ local function doHarvest()
     if not Toggles.AutoHarvest then return end
     if HarvestDone then return end
     HarvestDone = true
+
+    -- Selalu collect dead tree terlebih dahulu (paling aman)
     if Remote.CollectDeadTree then
         pcall(function() Remote.CollectDeadTree:InvokeServer() end)
     end
+
+    -- Jika mode Grown, hentikan plant agar buah turun / collect semua
     if Settings.HarvestMode == "Grown" and Remote.StopPlant then
         pcall(function() Remote.StopPlant:InvokeServer() end)
     end
@@ -446,8 +448,8 @@ SubFarm:AddToggle({
     end
 })
 
--- SubHarvest
-SubHarvest:AddSection("HARVEST")
+-- SubHarvest (berisi semua fitur harvest)
+SubHarvest:AddSection("HARVEST SETTINGS")
 SubHarvest:AddToggle({
     Name = "Auto Harvest",
     Default = false,
@@ -486,7 +488,7 @@ SubHarvest:AddSlider({
     Callback = function(v) Settings.GrownWaitTime = v end
 })
 
--- SubManual
+-- SubManual (berisi tombol manual)
 SubManual:AddSection("MANUAL CONTROLS")
 SubManual:AddButton({
     Name = "Plant Now",
