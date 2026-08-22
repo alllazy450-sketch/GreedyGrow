@@ -1,6 +1,6 @@
 -- ============================================================
---  W424HUB | GREEDY GROWERS AUTO FARM v5.3 (ADVANCED)
---  New: Auto Rebirth, Admin Detector, Server Hopper
+--  W424HUB | GREEDY GROWERS AUTO FARM v5.6 (PRO EDITION)
+--  Sistem: Auto-Equip, Multi-Seed, & Custom Grown Config
 -- ============================================================
 
 -- [TRACKING DATA]
@@ -8,7 +8,6 @@ local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 local StartTime = tick()
 local InitialMoney = 0
-local AdminGroupID = 34320950 -- Ganti dengan Group ID game jika tahu
 
 pcall(function() InitialMoney = LocalPlayer.leaderstats.Money.Value end)
 
@@ -20,10 +19,10 @@ Library:SetTheme("Ocean")
 local MY_LOGO = "rbxassetid://70773874533764"
 
 local Window = Library:CreateWindow({
-    Name = "W424HUB v5.3",
-    BrandSubtitle = "Advanced Greedy Growers Engine",
+    Name = "W424HUB v5.6",
+    BrandSubtitle = "Multi-Seed & Auto-Equip Engine",
     Logo = MY_LOGO,
-    Size = UDim2.fromOffset(750, 550),
+    Size = UDim2.fromOffset(750, 650),
 })
 
 -- [KNIT SERVICES INITIALIZATION]
@@ -47,145 +46,170 @@ local function InitKnit()
         Remote.SellAll          = KnitServices.SellStandService.RF.SellAll
         Remote.BuySeed          = KnitServices.SeedStandService.RF.BuySeed
         Remote.ToggleEquip      = KnitServices.ToolService.RE.ToggleEquip
-        Remote.CollectAllFruits = KnitServices.PlayerPlotService.RF.CollectAllFruits
         Remote.GetMyPlot        = KnitServices.PlayerPlotService.RF.GetMyPlot
-        -- Remote Rebirth (Biasanya ada di RebirthService)
-        Remote.Rebirth          = pcall(function() return KnitServices.RebirthService.RF.Rebirth end)
     end
 end
 InitKnit()
 
 -- [STATE & SETTINGS]
-local Toggles = { AutoFarm = false, AutoSell = false, AutoBuy = false, AntiAFK = true, Webhook = false, AutoRebirth = false, AdminDetect = false }
-local Settings = { SelectedSeed = "Oak", BuyAmount = 100, WebhookURL = "", WebhookInt = 600 }
+local Toggles = { AutoFarm = false, AutoSell = false, AntiAFK = true }
+local Settings = { 
+    MultiSeeds = {"Oak"}, -- Menyimpan daftar seed yang dipilih
+    RoundType = "Basic",   -- Basic / Research / Gold
+    HarvestMode = "DeadTree",
+    GrownWaitTime = 5,     -- User bisa setting ini (detik)
+    SafetyTimeout = 30,
+    SmartDelay = 1,
+    CurrentSeedIndex = 1
+}
 local FarmRunning = false
-local LastWebhookTime = 0
 
--- [FUNCTIONS]
-local function ServerHop()
-    local PlaceID = game.PlaceId
-    local JobID = game.JobId
-    local TeleportService = game:GetService("TeleportService")
-    pcall(function()
-        TeleportService:Teleport(PlaceID, LocalPlayer)
-    end)
-end
+-- [FUNCTIONS: SMART EQUIP]
+local function SmartEquip(seedName)
+    -- Mencari seed di Inventory Folder atau Backpack
+    local inventory = LocalPlayer:FindFirstChild("Inventory") or LocalPlayer:FindFirstChildOfClass("Backpack")
+    if not inventory then return false end
 
-local function CheckAdmin(player)
-    if Toggles.AdminDetect then
-        if player:GetRankInGroup(AdminGroupID) >= 100 or player.Name:lower():find("admin") then
-            Window:Notify({ Title = "ADMIN DETECTED", Content = "Leaving server for safety...", Type = "warning" })
-            task.wait(1)
-            ServerHop()
+    for _, item in ipairs(inventory:GetChildren()) do
+        if item.Name:lower():find(seedName:lower()) then
+            -- Ambil Index item (biasanya ada di Attribute atau nama)
+            local itemIndex = item:GetAttribute("Index") or 1 
+            pcall(function() Remote.ToggleEquip:FireServer(true, itemIndex) end)
+            return true
         end
     end
-end
-
-local function SendWebhook()
-    if Settings.WebhookURL == "" then return end
-    local CurrentMoney = LocalPlayer.leaderstats.Money.Value
-    local data = {
-        ["embeds"] = {{
-            ["title"] = "W424HUB v5.3 Report",
-            ["color"] = 65432,
-            ["fields"] = {
-                {["name"] = "Player", ["value"] = LocalPlayer.Name, ["inline"] = true},
-                {["name"] = "Earned", ["value"] = "$" .. tostring(CurrentMoney - InitialMoney), ["inline"] = true},
-                {["name"] = "Total Money", ["value"] = "$" .. tostring(CurrentMoney), ["inline"] = false}
-            }
-        }}
-    }
-    pcall(function()
-        (syn and syn.request or http_request or request)({
-            Url = Settings.WebhookURL, Method = "POST",
-            Headers = {["Content-Type"] = "application/json"},
-            Body = game:GetService("HttpService"):JSONEncode(data)
-        })
-    end)
+    return false
 end
 
 -- [TABS & UI]
 local TabFarm = Window:AddTab({ Name = "Farm", Icon = "home" })
-local TabStats = Window:AddTab({ Name = "Stats", Icon = "chart" })
-local TabMisc = Window:AddTab({ Name = "Safety & Misc", Icon = "gear" })
+local TabConfig = Window:AddTab({ Name = "Smart Config", Icon = "gear" })
 
--- Tab Farm
+-- Tab Farm: Engine
 local SubFarm = TabFarm:AddSubTab("Engine")
-SubFarm:AddDropdown({ Name = "Select Seed", Options = {"Oak","Pine","Apple","Peach","Void"}, Default = "Oak", Callback = function(v) Settings.SelectedSeed = v end })
-SubFarm:AddToggle({ Name = "Start Auto Farm", Default = false, Callback = function(v) Toggles.AutoFarm = v end })
-SubFarm:AddToggle({ Name = "Auto Rebirth", Default = false, Callback = function(v) Toggles.AutoRebirth = v end })
+SubFarm:AddSection("PLANTING SYSTEM")
 
--- Tab Stats
-local SubStats = TabStats:AddSubTab("Dashboard")
-local LabelRate = SubStats:AddLabel({ Text = "Rate: $0/hr" })
-SubStats:AddInput({ Name = "Webhook URL", Placeholder = "URL...", Callback = function(v) Settings.WebhookURL = v end })
-SubStats:AddToggle({ Name = "Enable Webhook", Default = false, Callback = function(v) Toggles.Webhook = v end })
+SubFarm:AddDropdown({ 
+    Name = "Select Multiple Seeds", 
+    Options = {"Oak","Pine","Apple","Peach","Lemon","Dragon Fruit","Void"}, 
+    Default = {"Oak"}, 
+    Multi = true, -- BISA PILIH BANYAK
+    Callback = function(v) Settings.MultiSeeds = v end 
+})
 
--- Tab Misc
-local SubMisc = TabMisc:AddSubTab("Settings")
-SubMisc:AddToggle({ Name = "Admin Detector", Default = false, Callback = function(v) Toggles.AdminDetect = v end })
-SubMisc:AddButton({ Name = "Server Hop", Callback = ServerHop })
-SubMisc:AddButton({ Name = "Ultra Potato", Callback = function()
-    settings().Rendering.QualityLevel = 1
-    for _, v in ipairs(workspace:GetDescendants()) do
-        if v:IsA("BasePart") then v.Material = Enum.Material.SmoothPlastic end
-    end
-end })
+SubFarm:AddDropdown({ 
+    Name = "Round Type (Research)", 
+    Options = {"Basic", "Research", "Gold"}, 
+    Default = "Basic", 
+    Callback = function(v) Settings.RoundType = v end 
+})
 
--- [LOOPS]
+SubFarm:AddToggle({ Name = "Start Multi-Auto Farm", Default = false, Callback = function(v) Toggles.AutoFarm = v end })
+SubFarm:AddToggle({ Name = "Auto Sell", Default = false, Callback = function(v) Toggles.AutoSell = v end })
 
--- Admin Detector Event
-Players.PlayerAdded:Connect(CheckAdmin)
+-- Tab Config: Smart Settings
+local SubConfig = TabConfig:AddSubTab("Advanced")
+SubConfig:AddSection("GROWN MODE SETTINGS")
 
--- Main Automation Loop
+SubConfig:AddDropdown({ 
+    Name = "Harvest Mode", 
+    Options = {"DeadTree", "Grown"}, 
+    Default = "DeadTree",
+    Callback = function(v) Settings.HarvestMode = v end 
+})
+
+SubConfig:AddSlider({ 
+    Name = "Grown Pick Delay (sec)", 
+    Min = 0, Max = 30, Default = 5, 
+    Tooltip = "Berapa detik nunggu setelah pohon berbuah baru dipetik/stop.",
+    Callback = function(v) Settings.GrownWaitTime = v end 
+})
+
+SubConfig:AddSection("TIMING & SAFETY")
+SubConfig:AddSlider({ Name = "Safety Timeout (sec)", Min = 10, Max = 120, Default = 30, Callback = function(v) Settings.SafetyTimeout = v end })
+SubConfig:AddSlider({ Name = "Post-Harvest Delay (sec)", Min = 0, Max = 5, Default = 1, Callback = function(v) Settings.SmartDelay = v end })
+
+-- [MAIN LOOP: MULTI-SEED ENGINE]
+
 task.spawn(function()
     while true do
         task.wait(0.5)
         if Toggles.AutoFarm and not FarmRunning then
+            -- Cek apakah ada seed yang dipilih
+            if #Settings.MultiSeeds == 0 then 
+                task.wait(1) 
+                continue 
+            end
+
             FarmRunning = true
             
-            -- Auto Buy & Equip logic here
-            pcall(function() Remote.BuySeed:InvokeServer(Settings.SelectedSeed, 100) end)
+            -- Ambil seed berikutnya dari antrian
+            local targetSeed = Settings.MultiSeeds[Settings.CurrentSeedIndex]
             
-            -- Plant & Smart Wait
-            local success = pcall(function() Remote.StartRound:InvokeServer(Settings.SelectedSeed, "Basic") end)
+            -- AUTO EQUIP DETEKSYEN
+            local hasSeed = SmartEquip(targetSeed)
+            
+            if not hasSeed then
+                -- Jika tidak punya seed ini, coba beli otomatis (Optional)
+                pcall(function() Remote.BuySeed:InvokeServer(targetSeed, 1) end)
+                task.wait(0.5)
+                SmartEquip(targetSeed)
+            end
+
+            -- START PLANTING
+            local success = pcall(function() 
+                Remote.StartRound:InvokeServer(targetSeed, Settings.RoundType) 
+            end)
+
             if success then
                 local MyPlot = Remote.GetMyPlot:InvokeServer()
                 local start = tick()
-                repeat task.wait(1) until MyPlot:GetAttribute("Dead") or (tick() - start > 25) or not Toggles.AutoFarm
+                
+                -- MONITORING GROWTH
+                repeat 
+                    task.wait(0.5)
+                    local isReady = false
+                    if Settings.HarvestMode == "DeadTree" then
+                        isReady = MyPlot:GetAttribute("Dead") 
+                    else
+                        isReady = MyPlot:GetAttribute("Grown") or (MyPlot:GetAttribute("Stage") == 5)
+                    end
+                until isReady or (tick() - start > Settings.SafetyTimeout) or not Toggles.AutoFarm
+                
+                -- CUSTOM GROWN WAIT (SETTINGAN USER)
+                if Settings.HarvestMode == "Grown" and isReady then
+                    Window:Notify({ Title = "Pohon Tumbuh!", Content = "Menunggu "..Settings.GrownWaitTime.." detik sebelum petik.", Duration = 2 })
+                    task.wait(Settings.GrownWaitTime)
+                    pcall(function() Remote.StopPlant:InvokeServer() end)
+                    task.wait(0.2)
+                end
+
+                -- FINAL DELAY
+                if Settings.SmartDelay > 0 then task.wait(Settings.SmartDelay) end
+                
+                -- PANEN & JUAL
                 Remote.CollectDeadTree:InvokeServer()
-                Remote.SellAll:InvokeServer()
+                if Toggles.AutoSell then Remote.SellAll:InvokeServer() end
+
+                -- PINDAH KE SEED BERIKUTNYA DALAM LIST (Antrian)
+                Settings.CurrentSeedIndex = Settings.CurrentSeedIndex + 1
+                if Settings.CurrentSeedIndex > #Settings.MultiSeeds then
+                    Settings.CurrentSeedIndex = 1
+                end
             end
             FarmRunning = false
         end
-
-        if Toggles.AutoRebirth then
-            pcall(function() KnitServices.RebirthService.RF.Rebirth:InvokeServer() end)
-        end
     end
 end)
 
--- Stats Loop
-task.spawn(function()
-    while true do
-        task.wait(10)
-        local Earned = LocalPlayer.leaderstats.Money.Value - InitialMoney
-        local Rate = math.floor(Earned / ((tick() - StartTime) / 3600))
-        LabelRate.Text = "Rate: $" .. tostring(Rate) .. "/hr"
-        if Toggles.Webhook and (tick() - LastWebhookTime) > Settings.WebhookInt then
-            SendWebhook()
-            LastWebhookTime = tick()
-        end
-    end
-end)
-
--- Anti-AFK
-game:GetService("Players").LocalPlayer.Idled:Connect(function()
+-- Anti-AFK & Fixes
+local VirtualUser = game:GetService("VirtualUser")
+LocalPlayer.Idled:Connect(function()
     if Toggles.AntiAFK then
-        game:GetService("VirtualUser"):Button2Down(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
+        VirtualUser:Button2Down(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
         task.wait(1)
-        game:GetService("VirtualUser"):Button2Up(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
+        VirtualUser:Button2Up(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
     end
 end)
 
-Window:Notify({ Title = "W424HUB v5.3", Content = "Ready to Farm!", Type = "success" })
+Window:Notify({ Title = "W424HUB v5.6", Content = "Multi-Seed Engine Ready!", Type = "success" })
